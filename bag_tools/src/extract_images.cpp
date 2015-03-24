@@ -32,7 +32,7 @@
 
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
-
+#include <sensor_msgs/image_encodings.h> 
 #include <image_proc/processor.h>
 #include <camera_calibration_parsers/parse.h>
 
@@ -40,6 +40,7 @@
 
 #include "bag_tools/image_bag_processor.h"
 
+using namespace sensor_msgs::image_encodings; 
 /**
  * Saves color images from raw input
  */
@@ -55,24 +56,57 @@ public:
   {
     image_proc::ImageSet output;
     image_geometry::PinholeCameraModel camera_model; // empty, we don't need it here
-    if (!processor_.process(img, camera_model, output, image_proc::Processor::COLOR))
+    if (img->encoding == MONO8      || 
+        img->encoding == MONO16     || 
+        img->encoding == TYPE_32FC1 || 
+        img->encoding == TYPE_32SC1 || 
+        img->encoding == TYPE_8UC1  || 
+        img->encoding == TYPE_8SC1  ||
+        img->encoding == TYPE_16UC1 ||
+        img->encoding == TYPE_16SC1 || 
+        img->encoding == TYPE_64FC1)
     {
-      std::cerr << "ERROR Processing image" << std::endl;
-      return;
+      if (!processor_.process(img, camera_model, output, image_proc::Processor::MONO))
+      {
+        std::cerr << "ERROR Processing image" << std::endl;
+        return;
+      }
+      std::string filename = 
+        boost::str(boost::format("%s/%s%lu.%s") 
+            % save_dir_ 
+            % prefix_ 
+            % img->header.stamp.toNSec() 
+            % filetype_);
+      if (!cv::imwrite(filename, output.mono))
+        ROS_ERROR_STREAM("ERROR Saving " << filename);
+      else
+      {
+        ROS_DEBUG_STREAM("Saved " << filename);
+        num_saved_++;
+      }
     }
-    std::string filename = 
-      boost::str(boost::format("%s/%s%lu.%s") 
-          % save_dir_ 
-          % prefix_ 
-          % img->header.stamp.toNSec() 
-          % filetype_);
-    if (!cv::imwrite(filename, output.color))
-      ROS_ERROR_STREAM("ERROR Saving " << filename);
     else
     {
-      ROS_DEBUG_STREAM("Saved " << filename);
-      num_saved_++;
+      if (!processor_.process(img, camera_model, output, image_proc::Processor::COLOR))
+      {
+        std::cerr << "ERROR Processing image" << std::endl;
+        return;
+      }
+      std::string filename = 
+        boost::str(boost::format("%s/%s%lu.%s") 
+            % save_dir_ 
+            % prefix_ 
+            % img->header.stamp.toNSec() 
+            % filetype_);
+      if (!cv::imwrite(filename, output.color))
+        ROS_ERROR_STREAM("ERROR Saving " << filename);
+      else
+      {
+        ROS_DEBUG_STREAM("Saved " << filename);
+        num_saved_++;
+      }
     }
+
   }
 
 private:
